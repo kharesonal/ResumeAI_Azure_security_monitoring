@@ -170,7 +170,7 @@ To ensure the health and performance of your deployed MEAN application, you can 
 
 **2. Add Monitoring Metrics:**
 
-Application Metrics: To monitor the backend performance:
+**Application Metrics:** To monitor the backend performance:
 
 - In the Dashboard settings, click Add a tile and choose Metrics.
 - Select Application Insights as the source, then choose the appropriate metric (e.g., requests, failed requests, dependencies).
@@ -181,7 +181,7 @@ Application Metrics: To monitor the backend performance:
 ![Screenshot 2024-12-06 150520](https://github.com/user-attachments/assets/cf25c19c-fed4-4ef4-b195-895d97335116)
 
 
-App Service Metrics: For tracking App Service health and usage:
+**App Service Metrics:** For tracking App Service health and usage:
 
 - Click Add a tile and select Metrics.
 - Select App Service as the resource, and then choose metrics like CPU Usage, Memory Usage, Response Time, etc.
@@ -189,7 +189,7 @@ App Service Metrics: For tracking App Service health and usage:
 ![Screenshot 2024-12-06 151434](https://github.com/user-attachments/assets/6c7c988f-e86d-409a-91da-3eb555c6a43a)
 
   
-Customize the Dashboard:
+**Customize the Dashboard:**
 
 - Rearrange the tiles as needed to prioritize key metrics.
 - Save the dashboard to quickly access it whenever you need to check the application’s performance.
