@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resumeai-frontend
+  labels:
+    app: resumeai-frontend
+spec:
+  replicas: {{ .Values.frontEnd.replicaCount }}
+  selector:
+    matchLabels:
+      app: resumeai-frontend
+  template:
+    metadata:
+      labels:
+        app: resumeai-frontend
+    spec:
+      containers:
+        - name: resumeaifrontend
+          image: "{{ .Values.frontEnd.image }}"
+          ports:
+            - containerPort: {{ .Values.frontEnd.containerPort }}
+          env:
+            - name: API_TARGET
+              value: {{ .Values.backEnd.backEndURL }}

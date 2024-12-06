@@ -1,0 +1,22 @@
+version: '3'
+services:
+  resumeaibackend:
+    build:
+      context: ./ResumeBuilderBackend
+    environment:
+      - JWT_SECRET_KEY=MYREALLYSECRETKEY
+      - MONGO_URL=mongodb+srv://
+      - OPENAI_KEY=OPENAI_API_KEY
+      - GMAIL_USER=THIS EMAIL IS USED TO SEND RESUMES
+      - GMAIL_PASS=PASSWORD USED BY NODEMAILER
+      - FRONT_END=http://192.168.1.96:4200
+    network_mode: host
+
+  resumeaifrontend:
+    build:
+      context: ./ResumeBuilderAngular
+    network_mode: host
+    depends_on:
+      - resumeaibackend
+    environment:
+      - API_TARGET=http://192.168.1.96:4292

@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resumeai-backend
+spec:
+  selector:
+    matchLabels:
+      app: resumeai-backend
+  template:
+    metadata:
+      labels:
+        app: resumeai-backend
+    spec:
+      replicas: {{ .Values.backEnd.replicaCount }}
+      containers:
+      - name: resumeaibackend
+        image: {{ .Values.backEnd.image }}
+        env:
+          - name: JWT_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: resumeai-secrets
+                key: JWT_SECRET_KEY
+          - name: MONGO_URL
+            valueFrom:
+              secretKeyRef:
+                name: resumeai-secrets
+                key: MONGO_URL
+          - name: OPENAI_KEY
+            valueFrom:
+              secretKeyRef:
+                name: resumeai-secrets
+                key: OPENAI_KEY
+          - name: GMAIL_USER
+            valueFrom:
+              secretKeyRef:
+                name: resumeai-secrets
+                key: GMAIL_USER
+          - name: GMAIL_PASS
+            valueFrom:
+              secretKeyRef:
+                name: resumeai-secrets
+                key: GMAIL_PASS
+          - name: FRONT_END
+            valueFrom:
+              configMapKeyRef:
+                name: resumeai-config
+                key: FRONT_END
+        ports:
+          - containerPort: 4292

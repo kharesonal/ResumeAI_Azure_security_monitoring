@@ -1,0 +1,192 @@
+pipeline {
+    agent any
+
+    environment {
+        GIT_REPO = "https://github.com/Sukhilnair/ResumeAI.git"
+        ECR_REPO_URI = 'public.ecr.aws/b4e0x1f6'
+        AWS_REGION = 'us-east-1'
+        AWS_CREDENTIALS_ID = 'aws-credentials'
+        CLUSTER_NAME = 'sukhil-cluster'
+        KUBE_CONTEXT = "minikube"
+        VERSION = "v${BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main', url: "${env.GIT_REPO}"
+            }
+        }
+
+        stage('Build Backend') {
+            steps {
+                script {
+                    sh '''
+                        cd ResumeBuilderBackend 
+                        docker build -t ${ECR_REPO_URI}/resumeai/backend:${VERSION} -t ${ECR_REPO_URI}/resumeai/backend:latest .
+                    '''
+                }
+            }
+        }
+
+        stage('Build Frontend') {
+            steps {
+                script {
+                    sh '''
+                        cd ResumeBuilderAngular 
+                        docker build -t ${ECR_REPO_URI}/resumeai/frontend:${VERSION} -t ${ECR_REPO_URI}/resumeai/frontend:latest .
+                    '''
+                }
+            }
+        }
+
+
+        stage('Push Frontend Docker Image') {
+            steps {
+                script {
+                    sh "docker push ${ECR_REPO_URI}/resumeai/frontend:${VERSION}"
+                }
+            }
+        }
+
+        stage('Push Backend Docker Image') {
+            steps {
+                script {
+                    sh "docker push ${ECR_REPO_URI}/resumeai/backend:${VERSION}"
+                }
+            }
+        }
+
+        stage('Deploy Application to Minikube with Helm') {
+            steps {
+                script {
+                    withCredentials([string(credentialsId: 'mongodb-url-secret', variable: 'MONGODB_URL')]) {
+                        sh '''
+                            kubectl config use-context ${KUBE_CONTEXT}
+                            helm repo add stable https://charts.helm.sh/stable
+                            helm repo update
+                            if helm list --namespace resumeai | grep -q resumeai; then
+                                helm uninstall resumeai --namespace resumeai
+                            fi
+                            helm install resumeai-minikube ./ResumeAI --namespace resumeai-minikube --set secrets.mongoUrl=${MONGODB_URL} --set secrets.jwtSecretKey="NEWSECRETKEY" --set secrets.openAiKey="NEWOPENAIKEY" --set secrets.gmailUser="new_email@gmail.com" --set secrets.gmailPass="NEWGMAILPASSWORD" --set backEnd.image="resumeai/backend:${VERSION}" --set frontEnd.image="resumeai/frontend:${VERSION}" --set backEnd.backEndURL="http://resumeai-backend:4292" --create-namespace
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Check / Create EKS Cluster') {
+            steps {
+                withCredentials([aws(credentialsId: env.AWS_CREDENTIALS_ID)]) {
+                    script {
+                        sh """
+                            if ! eksctl get cluster --name ${env.CLUSTER_NAME} --region ${env.AWS_REGION}; then
+                                eksctl create cluster --name ${env.CLUSTER_NAME} --region ${env.AWS_REGION} --nodegroup-name standard-workers --node-type t3.medium --nodes 1 --nodes-min 1 --nodes-max 3 --managed
+                            fi
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Deploy Application with Helm') {
+            steps {
+                withCredentials([aws(credentialsId: env.AWS_CREDENTIALS_ID)]) {
+                    script {
+                        withCredentials([string(credentialsId: 'mongodb-url-secret', variable: 'MONGODB_URL')]) {
+                            sh """
+                                aws eks --region ${AWS_REGION} update-kubeconfig --name ${CLUSTER_NAME}
+                                helm repo add stable https://charts.helm.sh/stable
+                                helm repo update
+                                if helm list --namespace resumeai | grep -q resumeai; then
+                                    helm uninstall resumeai --namespace resumeai
+                                fi
+                                helm install resumeai ./ResumeAI --namespace resumeai --set secrets.mongoUrl=${MONGODB_URL} --set secrets.jwtSecretKey="NEWSECRETKEY" --set secrets.openAiKey="NEWOPENAIKEY" --set secrets.gmailUser="new_email@gmail.com" --set secrets.gmailPass="NEWGMAILPASSWORD" --set backEnd.image="${ECR_REPO_URI}/resumeai/backend:${VERSION}" --set frontEnd.image="${ECR_REPO_URI}/resumeai/frontend:${VERSION}" --set backEnd.backEndURL="http://resumeai-backend:4292" --create-namespace
+                            """
+                        }
+                    }
+                }
+            }
+        }
+        stage('Check / Create AKS Cluster') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: env.AZURE_CREDENTIALS_ID, usernameVariable: 'AZURE_CLIENT_ID', passwordVariable: 'AZURE_CLIENT_SECRET')]) {
+                    script {
+                        sh '''
+                            # Login to Azure
+                            az login --service-principal -u ${AZURE_CLIENT_ID} -p ${AZURE_CLIENT_SECRET} --tenant $AZURE_TENANT_ID
+
+                            # Check if AKS cluster exists
+                            if ! az aks show --resource-group ${AKS_RESOURCE_GROUP} --name ${AKS_CLUSTER_NAME} &> /dev/null; then
+                                echo "AKS cluster does not exist. Creating new cluster..."
+                                
+                                # Create resource group
+                                az group create --name ${AKS_RESOURCE_GROUP} --location ${AKS_LOCATION}
+                                
+                                # Create AKS cluster
+                                az aks create \
+                                    --resource-group ${AKS_RESOURCE_GROUP} \
+                                    --name ${AKS_CLUSTER_NAME} \
+                                    --node-count 2 \
+                                    --node-vm-size Standard_DS2_v2 \
+                                    --generate-ssh-keys \
+                                    --service-principal ${AZURE_CLIENT_ID} \
+                                    --client-secret ${AZURE_CLIENT_SECRET}
+                                
+                                # Get credentials for kubectl
+                                az aks get-credentials \
+                                    --resource-group ${AKS_RESOURCE_GROUP} \
+                                    --name ${AKS_CLUSTER_NAME}
+                            else
+                                echo "AKS cluster already exists. Getting credentials..."
+                                # Get credentials for existing cluster
+                                az aks get-credentials \
+                                    --resource-group ${AKS_RESOURCE_GROUP} \
+                                    --name ${AKS_CLUSTER_NAME}
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Deploy Application to AKS with Helm') {
+            steps {
+                withCredentials([
+                    usernamePassword(credentialsId: env.AZURE_CREDENTIALS_ID, usernameVariable: 'AZURE_CLIENT_ID', passwordVariable: 'AZURE_CLIENT_SECRET'),
+                    string(credentialsId: 'mongodb-url-secret', variable: 'MONGODB_URL')
+                ]) {
+                    script {
+                        sh '''
+                            # Ensure we're using the AKS context
+                            kubectl config use-context ${AKS_CLUSTER_NAME}
+                            
+                            # Add Helm repositories
+                            helm repo add stable https://charts.helm.sh/stable
+                            helm repo update
+                            
+                            # Uninstall existing release if it exists
+                            if helm list --namespace resumeai | grep -q resumeai; then
+                                helm uninstall resumeai --namespace resumeai
+                            fi
+                            
+                            # Install Helm chart to AKS
+                            helm install resumeai-aks ./ResumeAI \
+                                --namespace resumeai-aks \
+                                --set secrets.mongoUrl=${MONGODB_URL} \
+                                --set secrets.jwtSecretKey="AKSCLUSTER_NEWSECRETKEY" \
+                                --set secrets.openAiKey="AKSCLUSTER_NEWOPENAIKEY" \
+                                --set secrets.gmailUser="aks_email@gmail.com" \
+                                --set secrets.gmailPass="AKSCLUSTER_NEWGMAILPASSWORD" \
+                                --set backEnd.image="${ECR_REPO_URI}/resumeai/backend:${VERSION}" \
+                                --set frontEnd.image="${ECR_REPO_URI}/resumeai/frontend:${VERSION}" \
+                                --set backEnd.backEndURL="http://resumeai-backend:4292" \
+                                --create-namespace
+                        '''
+                    }
+                }
+            }
+        }
+
+    }
+}

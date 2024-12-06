@@ -1,0 +1,25 @@
+namespace: resumeai
+backEnd:
+  backEndURL: http://resumeai-backend:4200
+  image: your-backend-image
+  pullPolicy: always
+  containerPort: 4292
+  replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+
+frontEnd:
+  frontEndURL: http://resumeai-frontend:4292
+  image: your-frontend-image
+  pullPolicy: always
+  replicaCount: 1
+  containerPort: 4200
+
+secrets:
+  mongoUrl: mongodb+srv://<username>:<password>@<cluster-url>
+  jwtSecretKey: MYREALLYSECRETKEY
+  openAiKey: OPENAI_API_KEY
+  gmailUser: THIS EMAIL IS USED TO SEND RESUMES
+  gmailPass: PASSWORD USED BY NODEMAILER
